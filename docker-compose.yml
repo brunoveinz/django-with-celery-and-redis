@@ -1,0 +1,57 @@
+version: '3'
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - DEBUG=1
+    env_file:
+      - ./.env
+    depends_on:
+      - db
+      - redis
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+
+  db:
+    image: postgres:latest
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=guarderia_user
+      - POSTGRES_PASSWORD=guarderia_password
+      - POSTGRES_DB=guarderia_db_dev
+
+  redis:
+    image: "redis:latest"
+    ports:
+      - "6379:6379"
+
+  celery:
+    build:
+      context: .
+    command: celery -A guarderia worker -l info
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+      - redis
+
+  flower:
+    build: .
+    command: celery -A guarderia flower --port=5555
+    ports:
+      - "5555:5555"
+    depends_on:
+      - web
+      - db
+      - redis
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+volumes:
+  postgres_data:
